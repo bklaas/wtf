@@ -68,7 +68,7 @@ func (widget *Widget) displayMyPullRequests(repo *Repo) string {
 
 	str := ""
 	for idx, pr := range prs {
-		str += fmt.Sprintf(` %s[green]["%d"]%4d[""][white] %s`, widget.mergeString(pr), maxItems+idx, *pr.Number, *pr.Title)
+		str += fmt.Sprintf(` %s%s[green]["%d"]%4d[""][white] %s`, widget.mergeString(pr), widget.reviewString(repo, pr), maxItems+idx, *pr.Number, *pr.Title)
 		str += "\n"
 		widget.Items = append(widget.Items, *pr.Number)
 	}
@@ -114,7 +114,7 @@ func (widget *Widget) displayMyReviewRequests(repo *Repo) string {
 
 	str := ""
 	for idx, pr := range prs {
-		str += fmt.Sprintf(` [green]["%d"]%4d[""][white] %s`, idx, *pr.Number, *pr.Title)
+		str += fmt.Sprintf(` %s[green]["%d"]%4d[""][white] %s`, widget.reviewString(repo, pr), idx, *pr.Number, *pr.Title)
 		str += "\n"
 		widget.Items = append(widget.Items, *pr.Number)
 	}
@@ -152,6 +152,46 @@ var mergeIcons = map[string]string{
 	"clean":    "[green]\u2713[white] ",
 	"unstable": "[red]\u2717[white] ",
 	"blocked":  "[red]\u2717[white] ",
+}
+
+// Review status icons. Text icons are single-width so they can never disturb
+// column alignment; emoji are wider and render better on terminals with good
+// emoji support. Each entry is padded to occupy the same width as its peers.
+var reviewIconSets = map[string]map[string]string{
+	"text": {
+		ReviewApproved:         "[green]\u2713[white] ",
+		ReviewChangesRequested: "[red]\u2717[white] ",
+		ReviewRequired:         "[yellow]\u25cf[white] ",
+		ReviewCommented:        "[blue]\u25cb[white] ",
+		ReviewNone:             "  ",
+	},
+	"emoji": {
+		ReviewApproved:         "\u2705 ",
+		ReviewChangesRequested: "\u274c ",
+		ReviewRequired:         "\u231a ",
+		ReviewCommented:        "\U0001f4ac ",
+		ReviewNone:             "   ",
+	},
+}
+
+// reviewString renders a pull request's review status, or an equal-width blank
+// so that titles stay aligned down the column.
+func (widget *Widget) reviewString(repo *Repo, pr *ghb.PullRequest) string {
+	if !widget.settings.showReviewStatus {
+		return ""
+	}
+
+	icons, ok := reviewIconSets[widget.settings.reviewIcons]
+	if !ok {
+		icons = reviewIconSets["emoji"]
+	}
+
+	state := repo.CachedReviewStates[pr.GetNumber()]
+	if icon, ok := icons[state]; ok {
+		return icon
+	}
+
+	return icons[ReviewNone]
 }
 
 func (widget *Widget) mergeString(pr *ghb.PullRequest) string {

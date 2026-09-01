@@ -32,6 +32,7 @@ type Repo struct {
 	CachedMyPullRequests   []*ghb.PullRequest
 	CachedMyReviewRequests []*ghb.PullRequest
 	CachedCustomQueries    map[string]*ghb.IssuesSearchResult
+	CachedReviewStates     map[int]string
 }
 
 // NewGithubRepo returns a new Github Repo with a name, owner, apiKey, baseURL and uploadURL
@@ -64,7 +65,7 @@ func (repo *Repo) OpenIssues() {
 }
 
 // Refresh reloads the github data via the Github API and caches display data
-func (repo *Repo) Refresh(username string, enableStatus bool, customQueries []customQuery) {
+func (repo *Repo) Refresh(username string, enableStatus bool, showReviewStatus bool, customQueries []customQuery) {
 	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
@@ -84,6 +85,12 @@ func (repo *Repo) Refresh(username string, enableStatus bool, customQueries []cu
 	// Pre-compute display data so content() never does HTTP
 	repo.CachedMyReviewRequests = repo.computeMyReviewRequests(username)
 	repo.CachedMyPullRequests = repo.computeMyPullRequests(ctx, username, enableStatus)
+
+	if showReviewStatus {
+		repo.CachedReviewStates = repo.computeReviewStates(
+			ctx, repo.CachedMyPullRequests, repo.CachedMyReviewRequests,
+		)
+	}
 
 	repo.CachedCustomQueries = make(map[string]*ghb.IssuesSearchResult)
 	for _, q := range customQueries {
@@ -179,6 +186,85 @@ func (repo *Repo) individualPRs(ctx context.Context, prs []*ghb.PullRequest) []*
 		}
 	}
 	return ret
+}
+
+// Review states a pull request can be in, mirroring the values GitHub's own
+// UI derives from a PR's reviews.
+const (
+	ReviewApproved         = "approved"
+	ReviewChangesRequested = "changes_requested"
+	ReviewRequired         = "review_required"
+	ReviewCommented        = "commented"
+	ReviewNone             = "none"
+)
+
+// computeReviewStates maps pull request number -> review state.
+//
+// Only a reviewer's most recent verdict counts: DISMISSED clears it and
+// COMMENTED leaves it standing. A single outstanding CHANGES_REQUESTED
+// outranks any number of approvals, matching GitHub's own behaviour.
+func (repo *Repo) computeReviewStates(ctx context.Context, prLists ...[]*ghb.PullRequest) map[int]string {
+	states := map[int]string{}
+
+	github, err := repo.githubClient()
+	if err != nil {
+		return states
+	}
+
+	for _, prs := range prLists {
+		for _, pr := range prs {
+			number := pr.GetNumber()
+			if _, seen := states[number]; seen {
+				continue
+			}
+
+			reviews, _, err := github.PullRequests.ListReviews(ctx, repo.Owner, repo.Name, number, nil)
+			if err != nil {
+				continue
+			}
+
+			// Reviews arrive oldest first, so later entries overwrite earlier
+			// ones and the map ends up holding each reviewer's latest verdict.
+			latest := map[string]string{}
+			commented := false
+			for _, review := range reviews {
+				login := review.GetUser().GetLogin()
+				switch review.GetState() {
+				case "APPROVED", "CHANGES_REQUESTED":
+					latest[login] = review.GetState()
+				case "DISMISSED":
+					delete(latest, login)
+				case "COMMENTED":
+					commented = true
+				}
+			}
+
+			states[number] = reviewState(latest, commented, len(pr.RequestedReviewers) > 0)
+		}
+	}
+
+	return states
+}
+
+func reviewState(latest map[string]string, commented bool, awaitingReviewers bool) string {
+	approved := false
+	for _, state := range latest {
+		if state == "CHANGES_REQUESTED" {
+			return ReviewChangesRequested
+		}
+		approved = true
+	}
+
+	switch {
+	case approved:
+		return ReviewApproved
+	case awaitingReviewers:
+		return ReviewRequired
+	case commented:
+		return ReviewCommented
+	default:
+		return ReviewNone
+	}
 }
 
 // myReviewRequests returns a list of pull requests for which username has been
