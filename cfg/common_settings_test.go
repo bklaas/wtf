@@ -193,3 +193,88 @@ func Test_PaginationMarker(t *testing.T) {
 func Test_Validations(t *testing.T) {
 	assert.Equal(t, 4, len(testCfg.Validations()))
 }
+
+func Test_HighlightColors(t *testing.T) {
+	tests := []struct {
+		name         string
+		moduleYaml   string
+		globalYaml   string
+		expectedFore string
+		expectedBack string
+	}{
+		{
+			// The defaults are what make an unconfigured selected row readable,
+			// so they have to survive the config plumbing being added.
+			name:         "with no highlight colors configured",
+			moduleYaml:   "colors:\n",
+			globalYaml:   "wtf:\n  colors:\n",
+			expectedFore: "black",
+			expectedBack: "green",
+		},
+		{
+			name:       "with global highlight colors",
+			moduleYaml: "colors:\n",
+			globalYaml: `
+wtf:
+  colors:
+    highlight:
+      fore: white
+      back: darkslateblue
+`,
+			expectedFore: "white",
+			expectedBack: "darkslateblue",
+		},
+		{
+			name: "with module highlight colors overriding global",
+			moduleYaml: `
+colors:
+  highlight:
+    fore: red
+    back: orange
+`,
+			globalYaml: `
+wtf:
+  colors:
+    highlight:
+      fore: white
+      back: darkslateblue
+`,
+			expectedFore: "red",
+			expectedBack: "orange",
+		},
+		{
+			// Each key falls back independently: setting only one must not drag
+			// the other away from its default.
+			name:       "with only the background configured",
+			moduleYaml: "colors:\n",
+			globalYaml: `
+wtf:
+  colors:
+    highlight:
+      back: gray
+`,
+			expectedFore: "black",
+			expectedBack: "gray",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			moduleCfg, err := config.ParseYaml(tt.moduleYaml)
+			assert.NoError(t, err)
+
+			globalCfg, err := config.ParseYaml(tt.globalYaml)
+			assert.NoError(t, err)
+
+			common := NewCommonSettingsFromModule("test", "Test Config", true, moduleCfg, globalCfg)
+
+			assert.Equal(t, tt.expectedFore, common.Colors.HighlightedForeground)
+			assert.Equal(t, tt.expectedBack, common.Colors.HighlightedBackground)
+			assert.Equal(
+				t,
+				tt.expectedFore+":"+tt.expectedBack,
+				common.DefaultFocusedRowColor(),
+			)
+		})
+	}
+}
