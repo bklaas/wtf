@@ -21,7 +21,8 @@ type Settings struct {
 	baseURL                string        `help:"Your GitHub Enterprise API URL." optional:"true"`
 	customQueries          []customQuery `help:"Custom queries allow you to filter pull requests and issues however you like. Give the query a title and a filter. Filters can be copied directly from GitHub’s UI." optional:"true"`
 	enableStatus           bool          `help:"Display pull request mergeability status (‘dirty’, ‘clean’, ‘unstable’, ‘blocked’)." optional:"true"`
-	reviewIcons            string        `help:"Icon set used for review status: ‘emoji’ or ‘text’." values:"emoji, text" optional:"true"`
+	reviewIcons            string        `help:"Icon set used for review status and the draft marker: ‘emoji’ or ‘text’." values:"emoji, text" optional:"true"`
+	showDraftStatus        bool          `help:"Mark pull requests that are still drafts." optional:"true"`
 	showReviewStatus       bool          `help:"Show each pull request’s review status (approved, changes requested, review required, commented)." optional:"true"`
 	repositories           []string      `help:"A list of github repositories." values:"Example: wtfutil/wtf"`
 	showMyPullRequests     bool          `help:"Show my pull requests section" optional:"true"`
@@ -48,6 +49,7 @@ func NewSettingsFromYAML(name string, ymlConfig *config.Config, globalConfig *co
 		showMyPullRequests:     ymlConfig.UBool("showMyPullRequests", true),
 		showOpenReviewRequests: ymlConfig.UBool("showOpenReviewRequests", true),
 		reviewIcons:            ymlConfig.UString("reviewIcons", "emoji"),
+		showDraftStatus:        ymlConfig.UBool("showDraftStatus", false),
 		showReviewStatus:       ymlConfig.UBool("showReviewStatus", false),
 		showStats:              ymlConfig.UBool("showStats", true),
 		uploadURL:              ymlConfig.UString("uploadURL", os.Getenv("WTF_GITHUB_UPLOAD_URL")),

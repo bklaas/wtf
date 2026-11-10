@@ -2,8 +2,10 @@ package github
 
 import (
 	"fmt"
+	"strings"
 
 	ghb "github.com/google/go-github/v89/github"
+	"github.com/rivo/tview"
 )
 
 func (widget *Widget) display() {
@@ -68,7 +70,7 @@ func (widget *Widget) displayMyPullRequests(repo *Repo) string {
 
 	str := ""
 	for idx, pr := range prs {
-		str += fmt.Sprintf(` %s%s[green]["%d"]%4d[""][white] %s`, widget.mergeString(pr), widget.reviewString(repo, pr), maxItems+idx, *pr.Number, *pr.Title)
+		str += fmt.Sprintf(` %s%s%s[green]["%d"]%4d[""][white] %s`, widget.mergeString(pr), widget.reviewString(repo, pr), widget.draftString(pr), maxItems+idx, *pr.Number, *pr.Title)
 		str += "\n"
 		widget.Items = append(widget.Items, *pr.Number)
 	}
@@ -114,7 +116,7 @@ func (widget *Widget) displayMyReviewRequests(repo *Repo) string {
 
 	str := ""
 	for idx, pr := range prs {
-		str += fmt.Sprintf(` %s[green]["%d"]%4d[""][white] %s`, widget.reviewString(repo, pr), idx, *pr.Number, *pr.Title)
+		str += fmt.Sprintf(` %s%s[green]["%d"]%4d[""][white] %s`, widget.reviewString(repo, pr), widget.draftString(pr), idx, *pr.Number, *pr.Title)
 		str += "\n"
 		widget.Items = append(widget.Items, *pr.Number)
 	}
@@ -192,6 +194,40 @@ func (widget *Widget) reviewString(repo *Repo, pr *ghb.PullRequest) string {
 	}
 
 	return icons[ReviewNone]
+}
+
+// Draft marker glyphs, one per icon set. The text glyph is single-width so it
+// can never disturb column alignment; the emoji reads better on terminals with
+// good emoji support.
+var draftIcons = map[string]string{
+	"text":  "[grey]\u270e[white]",
+	"emoji": "\U0001f32c\ufe0f",
+}
+
+// draftString renders a marker for a draft pull request, or an equal-width
+// blank for one that is ready, so that titles stay aligned down the column.
+//
+// The blank is measured from the glyph rather than hardcoded, so colour tags
+// are not counted and the two cannot drift apart if the glyph is swapped.
+// TaggedStringWidth is the measure tview lays out with, and it is the only one
+// that gets this right: on the draft emoji a raw runewidth call returns 1,
+// because the glyph needs a variation selector (U+FE0F) to take its full two
+// cells, and on the text glyph it would count the colour tags as content.
+func (widget *Widget) draftString(pr *ghb.PullRequest) string {
+	if !widget.settings.showDraftStatus {
+		return ""
+	}
+
+	icon, ok := draftIcons[widget.settings.reviewIcons]
+	if !ok {
+		icon = draftIcons["emoji"]
+	}
+
+	if pr.GetDraft() {
+		return icon + " "
+	}
+
+	return strings.Repeat(" ", tview.TaggedStringWidth(icon)+1)
 }
 
 func (widget *Widget) mergeString(pr *ghb.PullRequest) string {
