@@ -2,10 +2,8 @@ package github
 
 import (
 	"fmt"
-	"strings"
 
 	ghb "github.com/google/go-github/v89/github"
-	"github.com/rivo/tview"
 )
 
 func (widget *Widget) display() {
@@ -196,38 +194,48 @@ func (widget *Widget) reviewString(repo *Repo, pr *ghb.PullRequest) string {
 	return icons[ReviewNone]
 }
 
-// Draft marker glyphs, one per icon set. The text glyph is single-width so it
-// can never disturb column alignment; the emoji reads better on terminals with
-// good emoji support.
-var draftIcons = map[string]string{
-	"text":  "[grey]\u270e[white]",
-	"emoji": "\U0001f32c\ufe0f",
+// Keys for draftIconSets. GitHub exposes draft as a plain boolean on the pull
+// request itself, so unlike review state there is nothing to compute.
+const (
+	draftYes = "draft"
+	draftNo  = "ready"
+)
+
+// Draft marker icons, a pair per icon set. Both states carry a glyph, so the
+// pair has to be equal width or every column after it would step sideways as
+// rows change state; TestDraftMarkerWidthsMatch pins that down. Width here
+// means what tview.TaggedStringWidth reports, because that is what tview lays
+// out with -- worth stating since the draft emoji needs its variation selector
+// (U+FE0F) to measure its full 2, where a raw runewidth call returns 1, and
+// since the text glyphs carry colour tags that are markup rather than content.
+var draftIconSets = map[string]map[string]string{
+	"text": {
+		draftYes: "[grey]\u270e[white] ",
+		draftNo:  "[grey]\u25c6[white] ",
+	},
+	"emoji": {
+		draftYes: "\U0001f32c\ufe0f ",
+		draftNo:  "\U0001f381 ",
+	},
 }
 
-// draftString renders a marker for a draft pull request, or an equal-width
-// blank for one that is ready, so that titles stay aligned down the column.
-//
-// The blank is measured from the glyph rather than hardcoded, so colour tags
-// are not counted and the two cannot drift apart if the glyph is swapped.
-// TaggedStringWidth is the measure tview lays out with, and it is the only one
-// that gets this right: on the draft emoji a raw runewidth call returns 1,
-// because the glyph needs a variation selector (U+FE0F) to take its full two
-// cells, and on the text glyph it would count the colour tags as content.
+// draftString renders a pull request's draft state, drafted or ready, at equal
+// width either way so that titles stay aligned down the column.
 func (widget *Widget) draftString(pr *ghb.PullRequest) string {
 	if !widget.settings.showDraftStatus {
 		return ""
 	}
 
-	icon, ok := draftIcons[widget.settings.reviewIcons]
+	icons, ok := draftIconSets[widget.settings.reviewIcons]
 	if !ok {
-		icon = draftIcons["emoji"]
+		icons = draftIconSets["emoji"]
 	}
 
 	if pr.GetDraft() {
-		return icon + " "
+		return icons[draftYes]
 	}
 
-	return strings.Repeat(" ", tview.TaggedStringWidth(icon)+1)
+	return icons[draftNo]
 }
 
 func (widget *Widget) mergeString(pr *ghb.PullRequest) string {

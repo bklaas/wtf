@@ -44,11 +44,11 @@ func TestDraftString(t *testing.T) {
 			expected: "\U0001f32c️ ",
 		},
 		{
-			name:     "emoji ready is blank",
+			name:     "emoji ready",
 			show:     true,
 			iconSet:  "emoji",
 			draft:    false,
-			expected: "   ",
+			expected: "\U0001f381 ",
 		},
 		{
 			name:     "text draft",
@@ -58,11 +58,11 @@ func TestDraftString(t *testing.T) {
 			expected: "[grey]✎[white] ",
 		},
 		{
-			name:     "text ready is blank, colour tags not counted",
+			name:     "text ready",
 			show:     true,
 			iconSet:  "text",
 			draft:    false,
-			expected: "  ",
+			expected: "[grey]\u25c6[white] ",
 		},
 		{
 			name:     "an unknown icon set falls back to emoji",
@@ -86,13 +86,13 @@ func TestDraftString(t *testing.T) {
 // a panic here.
 func TestDraftStringHandlesMissingDraftField(t *testing.T) {
 	got := draftWidget(true, "emoji").draftString(&ghb.PullRequest{})
-	assert.Equal(t, "   ", got)
+	assert.Equal(t, "\U0001f381 ", got)
 }
 
-// The whole point of the blank is that a draft row and a ready row push the
-// following columns to the same place.
+// Both states carry a glyph now, so nothing but this keeps a draft row and a
+// ready row from pushing the following columns to different places.
 func TestDraftMarkerWidthsMatch(t *testing.T) {
-	for name := range draftIcons {
+	for name := range draftIconSets {
 		widget := draftWidget(true, name)
 
 		drafted := widget.draftString(prWithDraft(true))
